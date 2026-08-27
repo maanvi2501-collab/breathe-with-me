@@ -186,7 +186,6 @@
   <div id="introGlow" aria-hidden="true"><div id="introGlowInner"></div><div id="introGlowRing"></div></div>
 
   <div class="center">
-    <div id="emoji">&#128543;</div>
     <div id="label">Tap to Breathe</div>
     <div id="finalText">
       <div id="finalLine">You Are Here</div>
@@ -223,7 +222,6 @@
   var svg        = document.getElementById("rainbow");
   var measure      = document.getElementById("measure");
   var group        = document.getElementById("rainbowGroup");
-  var emojiEl      = document.getElementById("emoji");
   var labelEl      = document.getElementById("label");
   var finalText    = document.getElementById("finalText");
   var finalHeart   = document.getElementById("finalHeart");
@@ -513,7 +511,6 @@ var ringOpacityAmp = reducedMotion ? 0.10 : 0.42;
   }
 
   function hideIntro(){
-    emojiEl.style.opacity = "0";
     labelEl.classList.add("hidden");
     introGlowEl.classList.add("hidden");
   }
@@ -575,7 +572,6 @@ var ringOpacityAmp = reducedMotion ? 0.10 : 0.42;
 
       labelEl.textContent = "Tap to Breathe";
       labelEl.classList.remove("hidden");
-      emojiEl.style.opacity = "0.5";
       introGlowEl.classList.remove("hidden");
       announce("Tap to Breathe");
 
