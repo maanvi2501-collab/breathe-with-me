@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -342,4 +343,286 @@
     for (var i = 0; i < STAGES.length; i++){
       // Band 0 (violet) sits closest to the spine; each later band is
       // stacked outward by one thickness, so the rainbow grows broader
-      // — and more complete — with every
+      // — and more complete — with every tap.
+      var offsetDist = (i + 0.5) * thickness;
+      var bandPts = buildBandPoints(basePts, offsetDist);
+      var d = pointsToD(bandPts);
+      var len = polylineLength(bandPts);
+
+      var path = document.createElementNS(SVGNS, "path");
+      path.setAttribute("d", d);
+      path.setAttribute("stroke-width", thickness + 0.5); // tiny overlap, no hairline gaps
+      path.style.stroke = STAGES[i].color;
+
+      var revealed = prevRevealed.length ? prevRevealed[i] : false;
+      // No transition while we snap to the preserved state.
+      path.style.transition = "none";
+      path.style.strokeDasharray = len + " " + len;
+      path.style.strokeDashoffset = revealed ? "0" : String(len);
+      group.appendChild(path);
+
+      // Re-enable transitions on the next frame so future reveals animate.
+      (function(p){
+        requestAnimationFrame(function(){
+          requestAnimationFrame(function(){
+            p.style.transition = "stroke-dashoffset " +
+              (reducedMotion ? 1200 : 1600) + "ms cubic-bezier(0.16,1,0.3,1), " +
+              "stroke 2600ms ease";
+          });
+        });
+      })(path);
+
+      segments.push({ path: path, len: len });
+    }
+
+    // Re-apply the "converged to white" look after a rebuild mid/after final state.
+    if (state.finalTriggered){
+      segments.forEach(function(s){ s.path.style.stroke = "#ffffff"; });
+    }
+  }
+
+  var resizeTimer = null;
+  function onResize(){
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(buildRainbow, 120);
+  }
+  window.addEventListener("resize", onResize);
+  window.addEventListener("orientationchange", onResize);
+
+  // ---------------------------------------------------------------------
+  // Breathing engine — fully independent of tap/stage state.
+  // Phase model: inhale -> hold -> exhale -> rest, continuous, never reset.
+  // Timing derived from the reference motion study (~4.5s in / ~4.5s out,
+  // no hard pause, smooth accel/decel throughout).
+  // ---------------------------------------------------------------------
+  var PHASES = [
+    { name: "inhale", dur: 4500 },
+    { name: "hold",   dur: 500  },
+    { name: "exhale", dur: 4300 },
+    { name: "rest",   dur: 500  }
+  ];
+  var CYCLE = PHASES.reduce(function(sum, p){ return sum + p.dur; }, 0);
+
+  var breathStartTime = null;
+
+  function easeInOutSine(x){
+    return -(Math.cos(Math.PI * x) - 1) / 2;
+  }
+
+  function breathValueAt(elapsed){
+    var t = elapsed % CYCLE;
+    var acc = 0;
+    for (var i = 0; i < PHASES.length; i++){
+      var p = PHASES[i];
+      if (t < acc + p.dur){
+        var local = (t - acc) / p.dur;
+        if (p.name === "inhale") return easeInOutSine(local);
+        if (p.name === "hold")   return 1;
+        if (p.name === "exhale") return 1 - easeInOutSine(local);
+        return 0; // rest
+      }
+      acc += p.dur;
+    }
+    return 0;
+  }
+
+  function breathingLoop(now){
+    if (!state.breathingStarted) return;
+    if (breathStartTime === null) breathStartTime = now;
+    var eased = breathValueAt(now - breathStartTime);
+    applyBreath(eased);
+    requestAnimationFrame(breathingLoop);
+  }
+
+  function applyBreath(eased){
+    var scaleAmp   = reducedMotion ? 0.015 : 0.09;
+    var offsetAmp  = reducedMotion ? 0     : 5;
+    var brightAmp  = reducedMotion ? 0.04  : 0.14;
+    var glowBase   = 2, glowAmp = reducedMotion ? 1 : 7;
+    var glowAlphaBase = 0.10, glowAlphaAmp = reducedMotion ? 0.05 : 0.24;
+
+    var scale  = 1 + scaleAmp * eased;
+    var offset = -offsetAmp * eased;
+    var bright = 1 + brightAmp * eased;
+    var glow   = glowBase + glowAmp * eased;
+    var glowAlpha = glowAlphaBase + glowAlphaAmp * eased;
+
+    group.style.transform = "translate(0px, " + offset.toFixed(2) + "px) scale(" + scale.toFixed(4) + ")";
+    group.style.filter = "brightness(" + bright.toFixed(3) + ") drop-shadow(0 0 " +
+      glow.toFixed(2) + "px rgba(255,255,255," + glowAlpha.toFixed(3) + "))";
+
+    // The same breathing rhythm shows on the very first (pre-tap) screen
+    // as a large, high-contrast pulse of light — sized and lit to be
+    // easy to lock onto at a glance, including with narrowed or blurred
+    // vision (e.g. during a panic attack), not just a subtle ambience.
+    var glowScaleAmp = reducedMotion ? 0.04 : 0.22;
+    var glowOpacityBase = 0.55, glowOpacityAmp = reducedMotion ? 0.10 : 0.40;
+    var ringOpacityBase = 0.65, ringOpacityAmp = reducedMotion ? 0.08 : 0.30;
+    var introScale = 1 + glowScaleAmp * eased;
+    var introOpacity = glowOpacityBase + glowOpacityAmp * eased;
+    var ringOpacity = ringOpacityBase + ringOpacityAmp * eased;
+    var introTransform = "translate(-50%,-50%) scale(" + introScale.toFixed(4) + ")";
+    introGlowInnerEl.style.transform = introTransform;
+    introGlowInnerEl.style.opacity = introOpacity.toFixed(3);
+    introGlowRingEl.style.transform = introTransform;
+    introGlowRingEl.style.opacity = ringOpacity.toFixed(3);
+  }
+
+  function startBreathing(){
+    if (state.breathingStarted) return;
+    state.breathingStarted = true;
+    requestAnimationFrame(breathingLoop);
+  }
+
+  // ---------------------------------------------------------------------
+  // Stage progression
+  // ---------------------------------------------------------------------
+  function setLabel(text){
+    labelEl.classList.add("hidden");
+    setTimeout(function(){
+      labelEl.textContent = text;
+      labelEl.classList.remove("hidden");
+    }, 320);
+  }
+
+  function announce(text){
+    liveEl.textContent = text;
+  }
+
+  function revealSegment(i){
+    state.animating = true;
+    var seg = segments[i];
+    // Force the transition to run from the current (hidden) offset to 0.
+    seg.path.style.strokeDashoffset = "0";
+    var revealTime = reducedMotion ? 1300 : 1750;
+    setTimeout(function(){ state.animating = false; }, revealTime);
+  }
+
+  function revealStage(i){
+    setLabel(STAGES[i].label);
+    announce(STAGES[i].label);
+    revealSegment(i);
+  }
+
+  function hideIntro(){
+    emojiEl.style.opacity = "0";
+    labelEl.classList.add("hidden");
+    introGlowEl.classList.add("hidden");
+  }
+
+  function runFinalTransformation(){
+    state.animating = true;
+    announce("You Are Here");
+
+    setTimeout(function(){
+      // Converge every colour to a single luminous white line. The
+      // breathing loop keeps running untouched throughout.
+      segments.forEach(function(s){ s.path.style.stroke = "#ffffff"; });
+
+      setTimeout(function(){
+        finalText.classList.add("show");
+        setTimeout(function(){
+          finalHeart.classList.add("show");
+          state.animating = false;
+        }, 900);
+      }, 2700);
+    }, 300);
+  }
+
+  function resetExperience(){
+    // Fade the completed white rainbow away, then silently rewind every
+    // segment back to hidden so the next cycle draws in fresh. The
+    // breathing loop is never paused or reset — it carries straight
+    // through the loop, same as it carries through every tap.
+    state.animating = true;
+    finalText.classList.remove("show");
+    finalHeart.classList.remove("show");
+    announce("Returning to the beginning");
+
+    group.style.transition = "opacity 1100ms ease";
+    group.style.opacity = "0";
+
+    setTimeout(function(){
+      segments.forEach(function(s, i){
+        s.path.style.transition = "none";
+        s.path.style.stroke = STAGES[i].color;
+        s.path.style.strokeDashoffset = String(s.len);
+      });
+
+      group.style.transition = "";
+      group.style.opacity = "";
+
+      segments.forEach(function(s){
+        requestAnimationFrame(function(){
+          requestAnimationFrame(function(){
+            s.path.style.transition = "stroke-dashoffset " +
+              (reducedMotion ? 1200 : 1600) + "ms cubic-bezier(0.16,1,0.3,1), " +
+              "stroke 2600ms ease";
+          });
+        });
+      });
+
+      state.stageIndex = -1;
+      state.finalTriggered = false;
+
+      labelEl.textContent = "Tap to Breathe";
+      labelEl.classList.remove("hidden");
+      emojiEl.style.opacity = "0.5";
+      introGlowEl.classList.remove("hidden");
+      announce("Tap to Breathe");
+
+      state.animating = false;
+    }, 1150);
+  }
+
+  // ---------------------------------------------------------------------
+  // Input
+  // ---------------------------------------------------------------------
+  function onActivate(){
+    if (state.animating) return;
+
+    if (state.finalTriggered){
+      resetExperience();
+      return;
+    }
+
+    if (state.stageIndex === -1){
+      state.stageIndex = 0;
+      hideIntro();
+      revealStage(0);
+      return;
+    }
+
+    if (state.stageIndex < STAGES.length - 1){
+      state.stageIndex++;
+      revealStage(state.stageIndex);
+      return;
+    }
+
+    // All seven colours are visible — this tap begins the arrival.
+    state.finalTriggered = true;
+    labelEl.classList.add("hidden");
+    runFinalTransformation();
+  }
+
+  app.addEventListener("pointerup", function(e){
+    onActivate();
+  });
+
+  document.addEventListener("keydown", function(e){
+    if (e.key === "Enter" || e.key === " " || e.code === "Space"){
+      e.preventDefault();
+      onActivate();
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // Boot
+  // ---------------------------------------------------------------------
+  buildRainbow();
+  startBreathing(); // breathing is visible from the very first frame, pre-tap
+  try { app.focus({ preventScroll: true }); } catch (e) {}
+})();
+</script>
+</body>
+</html>
