@@ -435,11 +435,15 @@
   }
 
   function applyBreath(eased){
-    var scaleAmp   = reducedMotion ? 0.015 : 0.09;
-    var offsetAmp  = reducedMotion ? 0     : 5;
-    var brightAmp  = reducedMotion ? 0.04  : 0.14;
-    var glowBase   = 2, glowAmp = reducedMotion ? 1 : 7;
-    var glowAlphaBase = 0.10, glowAlphaAmp = reducedMotion ? 0.05 : 0.24;
+    var scaleAmp   = reducedMotion ? 0.03 : 0.28;
+var offsetAmp  = reducedMotion ? 0    : 18;
+var brightAmp  = reducedMotion ? 0.06 : 0.30;
+
+var glowBase   = 2;
+var glowAmp    = reducedMotion ? 1 : 16;
+
+var glowAlphaBase = 0.10;
+var glowAlphaAmp  = reducedMotion ? 0.06 : 0.38;
 
     var scale  = 1 + scaleAmp * eased;
     var offset = -offsetAmp * eased;
@@ -455,9 +459,13 @@
     // as a large, high-contrast pulse of light — sized and lit to be
     // easy to lock onto at a glance, including with narrowed or blurred
     // vision (e.g. during a panic attack), not just a subtle ambience.
-    var glowScaleAmp = reducedMotion ? 0.04 : 0.22;
-    var glowOpacityBase = 0.55, glowOpacityAmp = reducedMotion ? 0.10 : 0.40;
-    var ringOpacityBase = 0.65, ringOpacityAmp = reducedMotion ? 0.08 : 0.30;
+    var glowScaleAmp = reducedMotion ? 0.05 : 0.38;
+
+var glowOpacityBase = 0.45;
+var glowOpacityAmp = reducedMotion ? 0.12 : 0.50;
+
+var ringOpacityBase = 0.50;
+var ringOpacityAmp = reducedMotion ? 0.10 : 0.42;
     var introScale = 1 + glowScaleAmp * eased;
     var introOpacity = glowOpacityBase + glowOpacityAmp * eased;
     var ringOpacity = ringOpacityBase + ringOpacityAmp * eased;
